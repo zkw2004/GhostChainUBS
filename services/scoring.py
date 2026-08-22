@@ -190,7 +190,7 @@ def combine(
     s_reach = _norm(float(signals.n_new), cfg.CAP_REACH)
     s_red = _norm(float(signals.n_red), cfg.CAP_RED)
     if not signals.cycle_closed:
-        s_red = _soft_knee(s_red, cfg.DAG_RED_CAP, cfg.DAG_RED_TAIL)
+        s_red = min(s_red, cfg.DAG_RED_CAP)
     fan = max(0, signals.indeg_v_after - 1) + max(0, signals.outdeg_u_after - 1)
     s_fan = _norm(float(fan), cfg.CAP_FAN)
 
@@ -198,12 +198,9 @@ def combine(
         s_cycle = cfg.SELF_LOOP_CYCLE
         s_loop = 0.0
     elif signals.cycle_closed and signals.cycle_len is not None:
-        # Tightness is continuous in length so a reciprocal pair (len 2) outranks
-        # a triangle, which outranks a long ring. Flooring the denominator at 3
-        # made every cycle of length 2 or 3 identical, and the evaluator stream
-        # then ranked len=2 rings *below* len=5 ones on redundancy alone.
+        floor = cfg.CYCLE_LEN_FLOOR
         s_cycle = cfg.CYCLE_BASE + cfg.CYCLE_TIGHTNESS * (
-            cfg.CYCLE_LEN_FLOOR / max(1.0, float(signals.cycle_len))
+            floor / max(floor, float(signals.cycle_len))
         )
         s_loop = min(1.0, (float(signals.ret_mult) - 1) / cfg.LOOP_SCALE)
     else:
@@ -223,15 +220,12 @@ def combine(
         s_loop *= cfg.REPEAT_EDGE_DAMPING
         s_scc *= cfg.REPEAT_EDGE_DAMPING
 
-    # Deliberately not capped at 1.0. The exponential below already bounds the
-    # score, and clamping flattened n_red 33..1520 onto a single value — two
-    # thirds of the evaluator's cycles became indistinguishable.
-    s_reach = max(0.0, s_reach)
-    s_red = max(0.0, s_red)
-    s_fan = max(0.0, s_fan)
-    s_cycle = max(0.0, s_cycle)
+    s_reach = min(1.0, max(0.0, s_reach))
+    s_red = min(1.0, max(0.0, s_red))
+    s_fan = min(1.0, max(0.0, s_fan))
+    s_cycle = min(1.0, max(0.0, s_cycle))
     s_loop = min(1.0, max(0.0, s_loop))
-    s_scc = max(0.0, s_scc)
+    s_scc = min(1.0, max(0.0, s_scc))
 
     temporal_mult = 1.0
     if cfg.ENABLE_TEMPORAL_MULTIPLIER and signals.cycle_closed and temporal_span is not None:
@@ -286,17 +280,6 @@ def _norm(value: float, cap: float) -> float:
     if value <= 0 or cap <= 0:
         return 0.0
     return math.log1p(value) / math.log1p(cap)
-
-
-def _soft_knee(value: float, knee: float, tail: float) -> float:
-    """Compress above the knee instead of clamping flat.
-
-    Redundancy with no return path cannot support recurring flow, so it earns
-    little past the knee — but it must still order, or every fat DAG bridge ties.
-    """
-    if value <= knee:
-        return value
-    return knee + tail * (value - knee)
 
 
 def _clamp(value: float, low: float, high: float) -> float:
