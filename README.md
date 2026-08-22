@@ -2,6 +2,23 @@
 
 Real-time AML transaction risk scoring. Directed graph, 24-hour lookback, structural signals only.
 
+## Specification
+
+| File | Purpose |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Agent rules and definition of done |
+| [00-problem-brief.md](00-problem-brief.md) | Challenge restatement |
+| [01-architecture.md](01-architecture.md) | Modules and request lifecycle |
+| [02-scoring-model.md](02-scoring-model.md) | Scoring mathematics |
+| [03-api-contract.md](03-api-contract.md) | Endpoint behaviour |
+| [04-implementation-plan.md](04-implementation-plan.md) | Task list |
+| [05-testing-strategy.md](05-testing-strategy.md) | Test plan |
+| [06-decisions.md](06-decisions.md) | Decision register |
+| [07-tuning-diagnostics.md](07-tuning-diagnostics.md) | Evaluator diagnostics |
+| [08-phase-2-3-readiness.md](08-phase-2-3-readiness.md) | Later-phase hooks |
+
+This repo implements the service with Flask + Gunicorn for Heroku. Ignore FastAPI / Railway notes in the spec pack if they conflict with the running code here.
+
 ## Run locally
 
 ```bash
