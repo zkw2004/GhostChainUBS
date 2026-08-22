@@ -58,8 +58,10 @@ class ScoringConfig:
     SELF_LOOP_CYCLE: float = 0.25
     # Raw n_red grows with |A|×|D| and saturates on any large DAG bridge. A
     # non-cycle must not be allowed to spend the full redundancy budget — that
-    # is what pushed txn-30/35/54 into the cycle band (0.53–0.55).
+    # is what pushed txn-30/35/54 into the cycle band (0.53–0.55). Past the knee
+    # the tail keeps them ordered instead of tied flat.
     DAG_RED_CAP: float = 0.25
+    DAG_RED_TAIL: float = 0.10
 
     CYCLE_LEN_FLOOR: float = 3.0
     CYCLE_BASE: float = 0.5
@@ -107,6 +109,7 @@ class ScoringConfig:
             ),
             SELF_LOOP_CYCLE=_env_float("GC_SELF_LOOP_CYCLE", base.SELF_LOOP_CYCLE),
             DAG_RED_CAP=_env_float("GC_DAG_RED_CAP", base.DAG_RED_CAP),
+            DAG_RED_TAIL=_env_float("GC_DAG_RED_TAIL", base.DAG_RED_TAIL),
             CYCLE_LEN_FLOOR=_env_float("GC_CYCLE_LEN_FLOOR", base.CYCLE_LEN_FLOOR),
             CYCLE_BASE=_env_float("GC_CYCLE_BASE", base.CYCLE_BASE),
             CYCLE_TIGHTNESS=_env_float("GC_CYCLE_TIGHTNESS", base.CYCLE_TIGHTNESS),
