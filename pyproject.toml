@@ -3,8 +3,9 @@ name = "ghost-chain"
 version = "0.1.0"
 description = "Ghost Chains Phase 1 — real-time AML transaction risk scoring"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "flask==2.2.5",
-    "gunicorn==21.2.0",
+    "fastapi==0.115.6",
+    "uvicorn==0.32.1",
+    "pydantic==2.10.4",
 ]

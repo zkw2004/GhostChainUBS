@@ -1,6 +1,8 @@
 # Ghost Chains — Phase 1
 
-Real-time AML transaction risk scoring. Directed graph, 24-hour lookback, structural signals only.
+Real-time AML transaction risk scoring. Directed graph, 24-hour event-time window, structural signals only.
+
+The service follows the spec pack in this repo (`CLAUDE.md` and `00`–`08`). Scoring is the redundancy-vs-expansion model in `02-scoring-model.md`, not pattern-specific branches.
 
 ## Specification
 
@@ -17,75 +19,25 @@ Real-time AML transaction risk scoring. Directed graph, 24-hour lookback, struct
 | [07-tuning-diagnostics.md](07-tuning-diagnostics.md) | Evaluator diagnostics |
 | [08-phase-2-3-readiness.md](08-phase-2-3-readiness.md) | Later-phase hooks |
 
-This repo implements the service with Flask + Gunicorn for Heroku. Ignore FastAPI / Railway notes in the spec pack if they conflict with the running code here.
-
 ## Run locally
 
 ```bash
-python3 -m pip install -r requirements.txt
-python3 app.py
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1
 ```
-
-Smoke test (default `http://localhost:8080`):
 
 ```bash
-curl -s http://localhost:8080/ghost-chains/health
-
-curl -s -X POST http://localhost:8080/ghost-chains/reset \
-  -H 'Content-Type: application/json' \
-  -d '{"clearTransactions": true}'
-
-curl -s -X POST http://localhost:8080/ghost-chains/transactions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "transactions": [
-      {
-        "txId": "tx_meridian_001",
-        "fromUserId": "meridian_holdings",
-        "toUserId": "apex_logistics",
-        "amount": 370.0,
-        "createdAt": "2026-06-08T12:00:00Z"
-      }
-    ]
-  }'
+bash scripts/smoke.sh http://localhost:8080
+python3 -m pytest -q -m "not slow"
 ```
 
-Tests:
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-## Offline weight optimizer
-
-```bash
-python3 optimize_weights.py --method grid
-python3 optimize_weights.py --method random --iterations 5000 --seed 42
-```
+Weights live in `app/config.py` and can be overridden with `GC_W_RED`, `GC_W_CYCLE`, and the other `GC_*` environment variables.
 
 ## Deploy on Heroku
 
-State is in-memory, so the Procfile pins **one worker**. Do not raise `--workers`.
+State is in-memory. The Procfile pins **one uvicorn worker**.
 
 ```bash
-heroku login
-heroku create your-ghost-chains-app
-git init
-git add .
-git commit -m "Phase 1 risk scoring service"
 git push heroku master
+curl -s https://ghost-chains-app-71754905796a.herokuapp.com/ghost-chains/health
 ```
-
-If the default branch is `main`:
-
-```bash
-git push heroku main
-```
-
-Confirm:
-
-```bash
-curl -s https://your-ghost-chains-app.herokuapp.com/ghost-chains/health
-```
-
-Register that public base URL with the coordinator.
