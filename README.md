@@ -56,6 +56,13 @@ Tests:
 python3 -m unittest discover -s tests -v
 ```
 
+## Offline weight optimizer
+
+```bash
+python3 optimize_weights.py --method grid
+python3 optimize_weights.py --method random --iterations 5000 --seed 42
+```
+
 ## Deploy on Heroku
 
 State is in-memory, so the Procfile pins **one worker**. Do not raise `--workers`.
