@@ -157,7 +157,25 @@ class Phase2IdentityTests(unittest.TestCase):
         }
         self.assertNotIn("M", holders)
         self.assertNotIn("A", holders)
-        self.assertEqual(holders, {"C"})
+        self.assertEqual(holders, {"C", "H"})
+
+    def test_receiver_carries_initiator_identity(self):
+        self.engine.process_one(tx("t1", "M", "A", ipAddress=IP, deviceId=IOS))
+        apex = self.engine.graph.index_of("A")
+        self.assertIn(apex, self.engine.graph.ip_to_nodes.get(IP, set()))
+        self.assertIn(apex, self.engine.graph.device_to_nodes.get(IOS, set()))
+
+    def test_divergence_stays_visible_on_the_other_branch(self):
+        """Official Ex2: uniformity is over the origin-reachable subgraph."""
+        for item in (
+            tx("t1", "M", "A", deviceId=IOS),
+            tx("t2", "A", "C", minutes=1, deviceId=IOS),
+            tx("t3", "A", "S", minutes=2, deviceId=IOS),
+            tx("t4", "C", "O", minutes=3, deviceId=ANDROID),
+        ):
+            self.engine.process_one(item)
+        continued = tx("t5", "S", "X", minutes=4, deviceId=IOS)
+        self.assertGreater(self.engine.calculate_identity_signal(continued), 0.0)
 
     def test_reset_clears_identity_indexes(self):
         self.engine.process_one(tx("t1", "M", "A", deviceId=IOS, ipAddress=IP))

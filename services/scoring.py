@@ -79,12 +79,18 @@ def extract_identity(
     device_id: Optional[str],
     cfg: ScoringConfig = CFG,
 ) -> IdentitySignals:
-    """Identity anomalies in [0, 1]. Zero when there is no identity evidence."""
-    upstream = set(iter_bits(reach.ancestor_mask(src))) | {src}
+    """Identity anomalies in [0, 1]. Zero when there is no identity evidence.
+
+    Uniformity is judged on the directed subgraph reachable from every origin
+    that can already reach the sender — the official Phase 2 'reachable
+    subgraph from the origin', not only the sender's ancestor cone.
+    """
+    flow = _origin_reachable(reach, src)
+    flow.add(dest)
     local = graph.undirected_component(src) | graph.undirected_component(dest)
 
-    shift_ip, drop_ip = _flow_anomaly(graph, upstream, ip_address, "ip", cfg)
-    shift_dev, drop_dev = _flow_anomaly(graph, upstream, device_id, "device", cfg)
+    shift_ip, drop_ip = _flow_anomaly(graph, flow, ip_address, "ip", cfg)
+    shift_dev, drop_dev = _flow_anomaly(graph, flow, device_id, "device", cfg)
     shared_ip = _shared_disconnected(graph, local, ip_address, "ip", cfg)
     shared_dev = _shared_disconnected(graph, local, device_id, "device", cfg)
 
@@ -92,6 +98,19 @@ def extract_identity(
     drop = 1.0 - (1.0 - drop_ip) * (1.0 - drop_dev)
     share = 1.0 - (1.0 - shared_ip) * (1.0 - shared_dev)
     return IdentitySignals(shift=shift, drop=drop, share=share)
+
+
+def _origin_reachable(reach: BitsetReachability, src: int) -> Set[int]:
+    """Nodes already on the directed flow that contains src.
+
+    Take every ancestor of src (and src), then close forward under
+    descendants. Sibling branches from an earlier origin are included.
+    """
+    up_mask = reach.ancestor_mask(src) | bit(src)
+    cone: Set[int] = set(iter_bits(up_mask))
+    for node in sorted(cone):
+        cone.update(iter_bits(reach.descendant_mask(node)))
+    return cone
 
 
 def _flow_anomaly(

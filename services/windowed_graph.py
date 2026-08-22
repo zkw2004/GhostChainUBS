@@ -232,41 +232,37 @@ class WindowedGraph:
         dest_state = self.nodes.setdefault(dest, NodeState())
         src_state.total_out += tx.amount * delta
         dest_state.total_in += tx.amount * delta
+        endpoints = (src,) if src == dest else (src, dest)
         if tx.ip_address:
             if increment:
                 edge.ip_seen.add(tx.ip_address)
-                src_state.ips[tx.ip_address] = src_state.ips.get(tx.ip_address, 0) + 1
-                self.ip_to_nodes.setdefault(tx.ip_address, set()).add(src)
-            else:
-                count = src_state.ips.get(tx.ip_address, 0) + delta
-                if count <= 0:
-                    src_state.ips.pop(tx.ip_address, None)
-                    holders = self.ip_to_nodes.get(tx.ip_address)
-                    if holders is not None:
-                        holders.discard(src)
-                        if not holders:
-                            self.ip_to_nodes.pop(tx.ip_address, None)
-                else:
-                    src_state.ips[tx.ip_address] = count
+            for idx in endpoints:
+                self._touch_identity(idx, tx.ip_address, "ip", delta)
         else:
             edge.ip_absent_count = max(0, edge.ip_absent_count + delta)
             src_state.tx_missing_ip = max(0, src_state.tx_missing_ip + delta)
         if tx.device_id:
             if increment:
                 edge.device_seen.add(tx.device_id)
-                src_state.devices[tx.device_id] = src_state.devices.get(tx.device_id, 0) + 1
-                self.device_to_nodes.setdefault(tx.device_id, set()).add(src)
-            else:
-                count = src_state.devices.get(tx.device_id, 0) + delta
-                if count <= 0:
-                    src_state.devices.pop(tx.device_id, None)
-                    holders = self.device_to_nodes.get(tx.device_id)
-                    if holders is not None:
-                        holders.discard(src)
-                        if not holders:
-                            self.device_to_nodes.pop(tx.device_id, None)
-                else:
-                    src_state.devices[tx.device_id] = count
+            for idx in endpoints:
+                self._touch_identity(idx, tx.device_id, "device", delta)
         else:
             edge.device_absent_count = max(0, edge.device_absent_count + delta)
             src_state.tx_missing_device = max(0, src_state.tx_missing_device + delta)
+
+    def _touch_identity(self, idx: int, value: str, kind: str, delta: int) -> None:
+        """Attach or detach an identity value on one node. Both hop endpoints hold it."""
+        state = self.nodes.setdefault(idx, NodeState())
+        store = state.ips if kind == "ip" else state.devices
+        reverse = self.ip_to_nodes if kind == "ip" else self.device_to_nodes
+        count = store.get(value, 0) + delta
+        if count <= 0:
+            store.pop(value, None)
+            holders = reverse.get(value)
+            if holders is not None:
+                holders.discard(idx)
+                if not holders:
+                    reverse.pop(value, None)
+            return
+        store[value] = count
+        reverse.setdefault(value, set()).add(idx)

@@ -98,12 +98,25 @@ class RiskEngine:
         except (TypeError, ValueError):
             return 0.0
 
-        ip_address = raw.get("ipAddress")
-        device_id = raw.get("deviceId")
-        if ip_address is not None:
-            ip_address = str(ip_address)
-        if device_id is not None:
-            device_id = str(device_id)
+        ip_address = _optional_identity(
+            raw.get("ipAddress"), raw.get("ip_address"), raw.get("ip")
+        )
+        device_id = _optional_identity(
+            raw.get("deviceId"), raw.get("device_id"), raw.get("device")
+        )
+        extra_fields = sorted(
+            set(raw) - {
+                "txId",
+                "fromUserId",
+                "toUserId",
+                "amount",
+                "createdAt",
+                "ipAddress",
+                "deviceId",
+            }
+        )
+        if extra_fields:
+            logger.info("tx %s extra_fields=%s", tx_id, extra_fields)
 
         payload_hash = _payload_hash(
             from_id, to_id, amount_value, created_at, ip_address, device_id
@@ -239,6 +252,17 @@ class RiskEngine:
         if src is None or dst is None:
             return False
         return self.graph.has_edge(src, dst)
+
+
+def _optional_identity(*values: Any) -> Optional[str]:
+    """First non-empty identity string, or None. Blank / omitted are the same."""
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
 
 
 def _payload_hash(
