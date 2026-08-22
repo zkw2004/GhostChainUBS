@@ -30,7 +30,9 @@ class ScoringConfig:
     """Every tunable constant. Change weights here (or via GC_* env vars)."""
 
     WINDOW_SECONDS: float = 86400.0
-    WINDOW_BOUNDARY_INCLUSIVE: bool = False
+    # Inclusive matches "the most recent 24 hours": an edge at exactly W is still live.
+    # The v8 exclusive hardcode made hf-temporal01-tx6 look like a cold extension.
+    WINDOW_BOUNDARY_INCLUSIVE: bool = True
     MAX_BITSET_NODES: int = 8000
     ENABLE_TEMPORAL_MULTIPLIER: bool = False
     CONFLICTING_PAYLOAD_MODE: str = "return_original"
@@ -54,6 +56,10 @@ class ScoringConfig:
     SCALE: float = 2.0
     REPEAT_EDGE_DAMPING: float = 0.65
     SELF_LOOP_CYCLE: float = 0.25
+    # Raw n_red grows with |A|×|D| and saturates on any large DAG bridge. A
+    # non-cycle must not be allowed to spend the full redundancy budget — that
+    # is what pushed txn-30/35/54 into the cycle band (0.53–0.55).
+    DAG_RED_CAP: float = 0.25
 
     CYCLE_LEN_FLOOR: float = 3.0
     CYCLE_BASE: float = 0.5
@@ -100,6 +106,7 @@ class ScoringConfig:
                 "GC_REPEAT_EDGE_DAMPING", base.REPEAT_EDGE_DAMPING
             ),
             SELF_LOOP_CYCLE=_env_float("GC_SELF_LOOP_CYCLE", base.SELF_LOOP_CYCLE),
+            DAG_RED_CAP=_env_float("GC_DAG_RED_CAP", base.DAG_RED_CAP),
             CYCLE_LEN_FLOOR=_env_float("GC_CYCLE_LEN_FLOOR", base.CYCLE_LEN_FLOOR),
             CYCLE_BASE=_env_float("GC_CYCLE_BASE", base.CYCLE_BASE),
             CYCLE_TIGHTNESS=_env_float("GC_CYCLE_TIGHTNESS", base.CYCLE_TIGHTNESS),

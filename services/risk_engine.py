@@ -123,7 +123,9 @@ class RiskEngine:
         self.watermark.advance(created_at)
         cutoff = self.watermark.cutoff()
         if cutoff is not None:
-            removed = self.graph.expire(cutoff)
+            removed = self.graph.expire(
+                cutoff, inclusive=self.cfg.WINDOW_BOUNDARY_INCLUSIVE
+            )
             if removed:
                 self.reach.mark_dirty()
                 self.reach.ensure_fresh()

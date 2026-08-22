@@ -170,6 +170,8 @@ def combine(
     """Map signals onto [0, 1) with a strictly monotone exponential."""
     s_reach = _norm(float(signals.n_new), cfg.CAP_REACH)
     s_red = _norm(float(signals.n_red), cfg.CAP_RED)
+    if not signals.cycle_closed:
+        s_red = min(s_red, cfg.DAG_RED_CAP)
     fan = max(0, signals.indeg_v_after - 1) + max(0, signals.outdeg_u_after - 1)
     s_fan = _norm(float(fan), cfg.CAP_FAN)
 

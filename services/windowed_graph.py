@@ -98,11 +98,15 @@ class WindowedGraph:
         self._record_identity(src, dest, tx, edge, increment=True)
         return src, dest
 
-    def expire(self, cutoff: float) -> int:
+    def expire(self, cutoff: float, inclusive: bool = False) -> int:
+        """Drop transactions at or before cutoff. Inclusive keeps created_at == cutoff."""
         removed = 0
         while self.expiry_heap:
             created_at, tx_id = self.expiry_heap[0]
-            if created_at > cutoff:
+            if inclusive:
+                if created_at >= cutoff:
+                    break
+            elif created_at > cutoff:
                 break
             heapq.heappop(self.expiry_heap)
             stored = self.tx_by_id.get(tx_id)

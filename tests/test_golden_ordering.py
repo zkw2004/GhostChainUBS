@@ -236,6 +236,19 @@ class GoldenOrderingTests(unittest.TestCase):
         attach = self.engine.score_batch([tx("t4", "X", "A", minutes=3)])[0]["riskScore"]
         self.assertLess(attach + 0.15, cycle)
 
+    def test_fat_dag_redundancy_stays_below_cycle(self):
+        """A high-n_red bridge that does not close a cycle stays in the convergence band."""
+        cycle = last_score(
+            self.engine,
+            [("t1", "A", "B"), ("t2", "B", "C"), ("t3", "C", "A")],
+        )
+        diamond = last_score(
+            self.engine,
+            [("t1", "M", "A"), ("t2", "M", "H"), ("t3", "A", "S"), ("t4", "H", "S")],
+        )
+        self.assertGreater(cycle, diamond + 0.30)
+        self.assertLess(diamond, 0.30)
+
     def test_self_loop_below_mutual_cycle(self):
         isolated = last_score(self.engine, [("t1", "M", "A")])
         self_loop = last_score(self.engine, [("t1", "E1", "E1")])
