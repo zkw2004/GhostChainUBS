@@ -11,6 +11,13 @@ CYCLE_WEIGHT = 0.55
 CONVERGENCE_WEIGHT = 0.30
 REACHABILITY_WEIGHT = 0.15
 
+# Phase 2: added on top of structure so Phase 1 scores stay unchanged
+# when ipAddress / deviceId are absent and no upstream identity exists.
+IDENTITY_WEIGHT = 0.28
+IDENTITY_FLOW_MIX = 0.75
+# Shared identity across disconnected components is a hint, not proof.
+IDENTITY_SHARE_MIX = 0.22
+
 # Shorter return paths score closer to 1.0; longer ones decay gently.
 CYCLE_DISTANCE_DECAY = 0.20
 # Mix shortest-cycle strength vs. how many return routes already touch this edge.
@@ -77,12 +84,76 @@ class RiskEngine:
         cycle = self.calculate_cycle_signal(source, dest)
         convergence = self.calculate_convergence_signal(source, dest)
         reachability = self.calculate_reachability_signal(source, dest)
-        risk = (
+        structural = (
             CYCLE_WEIGHT * cycle
             + CONVERGENCE_WEIGHT * convergence
             + REACHABILITY_WEIGHT * reachability
         )
+        identity = self.calculate_identity_signal(tx)
+        risk = structural + IDENTITY_WEIGHT * identity
         return round(max(0.0, min(1.0, risk)), 6)
+
+    def calculate_identity_signal(self, tx: Transaction) -> float:
+        """Identity anomaly in [0, 1]. Zero when there is no identity evidence.
+
+        IP and device are independent. Shared identity across disconnected
+        components is a weaker hint than a shift or drop on a connected flow.
+        """
+        source = tx.from_user_id
+        dest = tx.to_user_id
+        upstream = self.graph.get_ancestors(source) | {source}
+        local = self.graph.get_undirected_component(source) | self.graph.get_undirected_component(
+            dest
+        )
+
+        shift_ip, drop_ip = self._flow_identity_anomaly(upstream, tx.ip_address, "ip")
+        shift_dev, drop_dev = self._flow_identity_anomaly(upstream, tx.device_id, "device")
+        shared_ip = self._shared_disconnected(local, tx.ip_address, "ip")
+        shared_dev = self._shared_disconnected(local, tx.device_id, "device")
+
+        flow = 1.0 - (
+            (1.0 - shift_ip)
+            * (1.0 - shift_dev)
+            * (1.0 - drop_ip)
+            * (1.0 - drop_dev)
+        )
+        shared = 1.0 - (1.0 - shared_ip) * (1.0 - shared_dev)
+        return min(1.0, IDENTITY_FLOW_MIX * flow + IDENTITY_SHARE_MIX * shared)
+
+    def _flow_identity_anomaly(
+        self, upstream: set, current: str | None, kind: str
+    ) -> tuple[float, float]:
+        observed = self.graph.identities_on_nodes(upstream, kind)
+        if current:
+            if not observed:
+                return 0.0, 0.0
+            extra = 0 if current in observed else 1
+            distinct = len(observed) + extra
+            return diminishing(distinct - 1), 0.0
+        if observed:
+            return 0.0, diminishing(len(observed))
+        return 0.0, 0.0
+
+    def _shared_disconnected(
+        self, local: set, value: str | None, kind: str
+    ) -> float:
+        if not value:
+            return 0.0
+        holders = (
+            self.graph.ip_to_entities.get(value, set())
+            if kind == "ip"
+            else self.graph.device_to_entities.get(value, set())
+        )
+        foreign = set(holders) - local
+        if not foreign:
+            return 0.0
+        components = 0
+        remaining = set(foreign)
+        while remaining:
+            seed = remaining.pop()
+            remaining -= self.graph.get_undirected_component(seed)
+            components += 1
+        return diminishing(components)
 
     def calculate_cycle_signal(self, source: str, dest: str) -> float:
         """Return-flow / cycle strength for a prospective edge source → dest.

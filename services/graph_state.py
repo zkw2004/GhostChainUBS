@@ -38,6 +38,13 @@ class GraphState:
         self._expiry_heap: list[tuple[datetime, str]] = []
         # txId -> (fingerprint, original riskScore); survives expiry
         self.idempotency: Dict[str, tuple[tuple, float]] = {}
+        # Phase 2 identity indexes. Counts honour the same 24-hour window as edges.
+        self.node_ips: Dict[str, Dict[str, int]] = {}
+        self.node_devices: Dict[str, Dict[str, int]] = {}
+        self.node_ip_absent: Dict[str, int] = {}
+        self.node_device_absent: Dict[str, int] = {}
+        self.ip_to_entities: Dict[str, Set[str]] = {}
+        self.device_to_entities: Dict[str, Set[str]] = {}
 
     def expire_old_transactions(self, now: datetime) -> None:
         """Drop transactions older than the 24-hour lookback relative to `now`."""
@@ -56,6 +63,7 @@ class GraphState:
         self.active_by_id[tx.tx_id] = tx
         heapq.heappush(self._expiry_heap, (tx.created_at, tx.tx_id))
         self._increment_edge(tx.from_user_id, tx.to_user_id)
+        self._apply_identity(tx, increment=True)
 
     def remember_score(self, tx: Transaction, risk_score: float) -> None:
         self.idempotency[tx.tx_id] = (tx.fingerprint(), risk_score)
@@ -86,6 +94,29 @@ class GraphState:
 
     def has_edge(self, source: str, dest: str) -> bool:
         return self.edge_counts.get((source, dest), 0) > 0
+
+    def get_undirected_component(self, node: str) -> Set[str]:
+        """Entities in the same weakly connected component as `node`."""
+        if node not in self.adjacency and node not in self.reverse_adjacency:
+            return {node}
+        seen = {node}
+        queue = deque([node])
+        while queue:
+            current = queue.popleft()
+            neighbours = set(self.adjacency.get(current, ()))
+            neighbours.update(self.reverse_adjacency.get(current, ()))
+            for neighbour in neighbours:
+                if neighbour not in seen:
+                    seen.add(neighbour)
+                    queue.append(neighbour)
+        return seen
+
+    def identities_on_nodes(self, nodes: Set[str], kind: str) -> Set[str]:
+        store = self.node_ips if kind == "ip" else self.node_devices
+        values: Set[str] = set()
+        for entity in nodes:
+            values.update(store.get(entity, ()))
+        return values
 
     def edge_count(self, source: str, dest: str) -> int:
         return self.edge_counts.get((source, dest), 0)
@@ -128,3 +159,56 @@ class GraphState:
     def _remove_active(self, tx: Transaction) -> None:
         self.active_by_id.pop(tx.tx_id, None)
         self._decrement_edge(tx.from_user_id, tx.to_user_id)
+        self._apply_identity(tx, increment=False)
+
+    def _apply_identity(self, tx: Transaction, increment: bool) -> None:
+        # ipAddress / deviceId describe who initiated the transfer.
+        # Tag both endpoints so shared identity can link counterparties
+        # that never transact with each other.
+        delta = 1 if increment else -1
+        endpoints = (tx.from_user_id, tx.to_user_id)
+        sender = tx.from_user_id
+        if tx.ip_address:
+            for entity in endpoints:
+                self._touch_value(
+                    entity, tx.ip_address, self.node_ips, self.ip_to_entities, delta
+                )
+        else:
+            self.node_ip_absent[sender] = self.node_ip_absent.get(sender, 0) + delta
+            if self.node_ip_absent[sender] <= 0:
+                self.node_ip_absent.pop(sender, None)
+        if tx.device_id:
+            for entity in endpoints:
+                self._touch_value(
+                    entity,
+                    tx.device_id,
+                    self.node_devices,
+                    self.device_to_entities,
+                    delta,
+                )
+        else:
+            self.node_device_absent[sender] = self.node_device_absent.get(sender, 0) + delta
+            if self.node_device_absent[sender] <= 0:
+                self.node_device_absent.pop(sender, None)
+
+    def _touch_value(
+        self,
+        entity: str,
+        value: str,
+        node_map: Dict[str, Dict[str, int]],
+        reverse_index: Dict[str, Set[str]],
+        delta: int,
+    ) -> None:
+        counts = node_map.setdefault(entity, {})
+        counts[value] = counts.get(value, 0) + delta
+        if counts[value] <= 0:
+            counts.pop(value, None)
+            holders = reverse_index.get(value)
+            if holders is not None:
+                holders.discard(entity)
+                if not holders:
+                    reverse_index.pop(value, None)
+            if not counts:
+                node_map.pop(entity, None)
+            return
+        reverse_index.setdefault(value, set()).add(entity)
