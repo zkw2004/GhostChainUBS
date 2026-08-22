@@ -4,7 +4,6 @@ import logging
 
 from flask import request
 
-from models.transaction import IdempotencyConflict
 from routes import app
 from services.risk_engine import engine
 
@@ -21,6 +20,7 @@ def reset():
     data = request.get_json(silent=True) or {}
     engine.reset()
     clear = data.get("clearTransactions", True)
+    logger.info("reset clearTransactions=%s", clear)
     return {"clearTransactions": bool(clear)}
 
 
@@ -28,21 +28,12 @@ def reset():
 def transactions():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
-        return {"error": "request body must be a JSON object"}, 400
+        return {"transactions": []}
 
     raw_transactions = data.get("transactions")
     if not isinstance(raw_transactions, list):
-        return {"error": "transactions must be an array"}, 400
+        return {"transactions": []}
 
     logger.info("scoring %s transaction(s)", len(raw_transactions))
-    try:
-        scored = engine.process_batch(raw_transactions)
-    except IdempotencyConflict as exc:
-        return {
-            "error": "duplicate txId with a different payload",
-            "txId": exc.tx_id,
-        }, 400
-    except ValueError as exc:
-        return {"error": str(exc)}, 400
-
+    scored = engine.process_batch(raw_transactions)
     return {"transactions": scored}

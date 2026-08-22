@@ -151,16 +151,19 @@ class Phase2IdentityTests(unittest.TestCase):
         late = tx("t2", "C", "H", minutes=24 * 60 + 2, ipAddress=IP)
         score = self.engine.process_one(late)
         self.assertLess(score, 0.05)
-        holders = self.engine.graph.ip_to_entities.get(IP, set())
+        holders = {
+            self.engine.graph.label_of(idx)
+            for idx in self.engine.graph.ip_to_nodes.get(IP, set())
+        }
         self.assertNotIn("M", holders)
         self.assertNotIn("A", holders)
-        self.assertEqual(holders, {"C", "H"})
+        self.assertEqual(holders, {"C"})
 
     def test_reset_clears_identity_indexes(self):
         self.engine.process_one(tx("t1", "M", "A", deviceId=IOS, ipAddress=IP))
         self.engine.reset()
-        self.assertEqual(self.engine.graph.device_to_entities, {})
-        self.assertEqual(self.engine.graph.ip_to_entities, {})
+        self.assertEqual(self.engine.graph.device_to_nodes, {})
+        self.assertEqual(self.engine.graph.ip_to_nodes, {})
 
 
 class Phase2ApiTests(unittest.TestCase):

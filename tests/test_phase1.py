@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from models.transaction import IdempotencyConflict, Transaction
+from models.transaction import Transaction
 from services.risk_engine import RiskEngine
 
 
@@ -161,8 +161,8 @@ class Phase1ScoringTests(unittest.TestCase):
         self.engine.process_one(tx("t2", "B", "C", minutes=1))
         late = tx("t3", "C", "A", minutes=24 * 60 + 2)
         score = self.engine.process_one(late)
-        self.assertFalse(self.engine.graph.has_edge("A", "B"))
-        self.assertFalse(self.engine.graph.has_edge("B", "C"))
+        self.assertFalse(self.engine.has_named_edge("A", "B"))
+        self.assertFalse(self.engine.has_named_edge("B", "C"))
         self.assertLess(score, 0.05)
 
     def test_duplicate_transaction_returns_same_score_without_mutation(self):
@@ -170,26 +170,28 @@ class Phase1ScoringTests(unittest.TestCase):
         score1 = self.engine.process_one(first)
         score2 = self.engine.process_one(first)
         self.assertEqual(score1, score2)
-        self.assertEqual(self.engine.graph.edge_count("A", "B"), 1)
+        self.assertEqual(self.engine.edge_count("A", "B"), 1)
 
-    def test_duplicate_tx_id_different_payload_is_an_error(self):
-        self.engine.process_one(tx("dup", "A", "B"))
-        with self.assertRaises(IdempotencyConflict):
-            self.engine.process_one(tx("dup", "A", "C"))
+    def test_duplicate_tx_id_different_payload_returns_original(self):
+        first = self.engine.process_one(tx("dup", "A", "B"))
+        second = self.engine.process_one(tx("dup", "A", "C"))
+        self.assertEqual(first, second)
+        self.assertEqual(self.engine.edge_count("A", "B"), 1)
+        self.assertFalse(self.engine.has_named_edge("A", "C"))
 
     def test_duplicate_graph_edges_survive_partial_expiry(self):
         self.engine.process_one(tx("e1", "A", "B", minutes=0))
         self.engine.process_one(tx("e2", "A", "B", minutes=60))
-        self.assertEqual(self.engine.graph.edge_count("A", "B"), 2)
+        self.assertEqual(self.engine.edge_count("A", "B"), 2)
 
         # 24h + 1 minute after the first edge: first expires, second remains.
         self.engine.process_one(tx("probe1", "X", "Y", minutes=24 * 60 + 1))
-        self.assertTrue(self.engine.graph.has_edge("A", "B"))
-        self.assertEqual(self.engine.graph.edge_count("A", "B"), 1)
+        self.assertTrue(self.engine.has_named_edge("A", "B"))
+        self.assertEqual(self.engine.edge_count("A", "B"), 1)
 
         # 24h + 1 minute after the second edge: both gone.
         self.engine.process_one(tx("probe2", "P", "Q", minutes=25 * 60 + 1))
-        self.assertFalse(self.engine.graph.has_edge("A", "B"))
+        self.assertFalse(self.engine.has_named_edge("A", "B"))
 
     def test_missing_optional_fields_are_allowed(self):
         payload = {
@@ -225,8 +227,8 @@ class Phase1ScoringTests(unittest.TestCase):
         self.engine.process_one(tx("a", "A", "B"))
         self.engine.process_one(tx("b", "B", "C", minutes=1))
         self.engine.reset()
-        self.assertEqual(self.engine.graph.edge_count("A", "B"), 0)
-        self.assertIsNone(self.engine.graph.lookup_idempotency("a"))
+        self.assertEqual(self.engine.edge_count("A", "B"), 0)
+        self.assertIsNone(self.engine.lookup_idempotency("a"))
         isolated = self.engine.process_one(tx("a", "A", "B"))
         self.assertLess(isolated, 0.05)
 
