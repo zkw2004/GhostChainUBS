@@ -86,6 +86,82 @@ class WindowTests(unittest.TestCase):
         )[0]["riskScore"]
         self.assertLess(abs(late - isolated), 0.05)
 
+    def test_heldout_temporal_23h_cycle_vs_24h_expiry(self):
+        """Evaluator last batch: 23h return cycles; exactly 24h does not."""
+        results = self.engine.score_batch(
+            [
+                {
+                    "txId": "hf-temporal01-tx1",
+                    "fromUserId": "hf_A1",
+                    "toUserId": "hf_A2",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T00:00:00Z",
+                },
+                {
+                    "txId": "hf-temporal01-tx4",
+                    "fromUserId": "hf_B1",
+                    "toUserId": "hf_B2",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T00:00:00Z",
+                },
+                {
+                    "txId": "hf-struct01-tx1",
+                    "fromUserId": "hf_E1",
+                    "toUserId": "hf_E1",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T00:00:00Z",
+                },
+                {
+                    "txId": "hf-temporal01-tx2",
+                    "fromUserId": "hf_A2",
+                    "toUserId": "hf_A3",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T01:00:00Z",
+                },
+                {
+                    "txId": "hf-temporal01-tx5",
+                    "fromUserId": "hf_B2",
+                    "toUserId": "hf_B3",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T01:00:00Z",
+                },
+                {
+                    "txId": "hf-struct01-tx2",
+                    "fromUserId": "hf_E2",
+                    "toUserId": "hf_E3",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T01:00:00Z",
+                },
+                {
+                    "txId": "hf-struct01-tx3",
+                    "fromUserId": "hf_E3",
+                    "toUserId": "hf_E2",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T02:00:00Z",
+                },
+                {
+                    "txId": "hf-temporal01-tx3",
+                    "fromUserId": "hf_A3",
+                    "toUserId": "hf_A1",
+                    "amount": 100,
+                    "createdAt": "2026-06-08T23:00:00Z",
+                },
+                {
+                    "txId": "hf-temporal01-tx6",
+                    "fromUserId": "hf_B3",
+                    "toUserId": "hf_B1",
+                    "amount": 100,
+                    "createdAt": "2026-06-09T00:00:00Z",
+                },
+            ]
+        )
+        by_id = {row["txId"]: row["riskScore"] for row in results}
+        self.assertGreater(by_id["hf-temporal01-tx3"], by_id["hf-temporal01-tx6"] + 0.30)
+        self.assertLess(by_id["hf-temporal01-tx6"], 0.12)
+        self.assertGreater(by_id["hf-struct01-tx3"], by_id["hf-struct01-tx1"] + 0.20)
+        self.assertGreater(by_id["hf-struct01-tx1"], by_id["hf-struct01-tx2"])
+        self.assertEqual(parse_iso("2026-06-08T00:00:00Z"), 1_780_876_800.0)
+
     def test_malformed_transaction_scores_zero_and_continues(self):
         results = self.engine.score_batch(
             [

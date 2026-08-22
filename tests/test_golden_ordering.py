@@ -220,6 +220,32 @@ class GoldenOrderingTests(unittest.TestCase):
         )[0]["riskScore"]
         self.assertLess(late + 0.2, closing)
 
+    def test_attach_to_existing_ring_stays_below_cycle(self):
+        """Joining a node that already sits on a cycle is not itself a cycle close."""
+        cycle = last_score(
+            self.engine,
+            [("t1", "A", "B"), ("t2", "B", "C"), ("t3", "C", "A")],
+        )
+        self.engine.reset()
+        run(
+            self.engine,
+            tx("t1", "A", "B"),
+            tx("t2", "B", "C", minutes=1),
+            tx("t3", "C", "A", minutes=2),
+        )
+        attach = self.engine.score_batch([tx("t4", "X", "A", minutes=3)])[0]["riskScore"]
+        self.assertLess(attach + 0.15, cycle)
+
+    def test_self_loop_below_mutual_cycle(self):
+        isolated = last_score(self.engine, [("t1", "M", "A")])
+        self_loop = last_score(self.engine, [("t1", "E1", "E1")])
+        mutual = last_score(
+            self.engine,
+            [("t1", "E2", "E3"), ("t2", "E3", "E2")],
+        )
+        self.assertLess(isolated, self_loop)
+        self.assertLess(self_loop + 0.10, mutual)
+
     def test_coherence_diamond_beats_tree(self):
         diamond = last_score(
             self.engine,

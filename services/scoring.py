@@ -186,7 +186,14 @@ def combine(
         s_cycle = 0.0
         s_loop = 0.0
 
-    s_scc = _norm(float(max(0, signals.scc_size - 1)), cfg.CAP_SCC)
+    # SCC / return-multiplicity describe a ring this edge forms. An ordinary
+    # attachment onto a node that already sits in a large SCC must not inherit
+    # that ring's size — that was inflating join-the-component edges toward
+    # cycle scores in the evaluator stream (e.g. txn-19, txn-43, txn-67).
+    if signals.cycle_closed:
+        s_scc = _norm(float(max(0, signals.scc_size - 1)), cfg.CAP_SCC)
+    else:
+        s_scc = 0.0
     if signals.is_repeat_edge:
         s_cycle *= cfg.REPEAT_EDGE_DAMPING
         s_loop *= cfg.REPEAT_EDGE_DAMPING

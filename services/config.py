@@ -52,8 +52,8 @@ class ScoringConfig:
     W_ID_SHARE: float = 0.20
 
     SCALE: float = 2.0
-    REPEAT_EDGE_DAMPING: float = 0.50
-    SELF_LOOP_CYCLE: float = 0.50
+    REPEAT_EDGE_DAMPING: float = 0.65
+    SELF_LOOP_CYCLE: float = 0.25
 
     CYCLE_LEN_FLOOR: float = 3.0
     CYCLE_BASE: float = 0.5
